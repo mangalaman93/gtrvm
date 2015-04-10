@@ -18,12 +18,12 @@
 #define STRING1 "black agagadrof!"
 
 
-void proc1() 
+void proc1()
 {
      rvm_t rvm;
      char* segs[2];
      trans_t trans;
-     
+
      rvm = rvm_init("rvm_segments");
 
      rvm_destroy(rvm, SEGNAME0);
@@ -45,7 +45,7 @@ void proc1()
 }
 
 
-void proc2() 
+void proc2()
 {
      rvm_t rvm;
      char *segs[2];
@@ -69,7 +69,7 @@ void proc2()
 }
 
 
-int main(int argc, char **argv) 
+int main(int argc, char **argv)
 {
      int pid;
 

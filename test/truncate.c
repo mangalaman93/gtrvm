@@ -6,13 +6,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int main(int argc, char **argv) 
+int main(int argc, char **argv)
 {
      rvm_t rvm;
 
      printf("Before Truncation:\n");
      system("ls -l rvm_segments");
-     
+
      rvm = rvm_init("rvm_segments");
      rvm_truncate_log(rvm);
 

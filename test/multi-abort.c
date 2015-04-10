@@ -41,7 +41,7 @@ int main(int argc, char **argv)
 
      rvm_commit_trans(trans);
 
-     
+
      /* start writing in some new data, but abort */
      trans = rvm_begin_trans(rvm, 2, (void **) segs);
 
@@ -51,7 +51,7 @@ int main(int argc, char **argv)
      strcpy(segs[1]+OFFSET1, BAD_STRING);
 
      rvm_abort_trans(trans);
-     
+
 
      /* test the strings */
      if(strcmp(segs[0] + OFFSET0, GOOD_STRING)) {

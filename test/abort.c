@@ -18,11 +18,11 @@ int main(int argc, char **argv)
      char *seg;
      char *segs[1];
      trans_t trans;
-     
+
      rvm = rvm_init("rvm_segments");
-     
+
      rvm_destroy(rvm, "testseg");
-     
+
      segs[0] = (char *) rvm_map(rvm, "testseg", 10000);
      seg = segs[0];
 
@@ -30,17 +30,17 @@ int main(int argc, char **argv)
      trans = rvm_begin_trans(rvm, 1, (void**) segs);
      rvm_about_to_modify(trans, seg, 0, 100);
      sprintf(seg, TEST_STRING1);
-     
+
      rvm_about_to_modify(trans, seg, OFFSET2, 100);
      sprintf(seg+OFFSET2, TEST_STRING1);
-     
+
      rvm_commit_trans(trans);
 
      /* start writing some different data, but abort */
      trans = rvm_begin_trans(rvm, 1, (void**) segs);
      rvm_about_to_modify(trans, seg, 0, 100);
      sprintf(seg, TEST_STRING2);
-     
+
      rvm_about_to_modify(trans, seg, OFFSET2, 100);
      sprintf(seg+OFFSET2, TEST_STRING2);
 
@@ -59,7 +59,7 @@ int main(int argc, char **argv)
 		 seg);
 	  exit(2);
      }
-     
+
 
      rvm_unmap(rvm, seg);
      printf("OK\n");
