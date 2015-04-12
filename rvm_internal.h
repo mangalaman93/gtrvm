@@ -15,10 +15,12 @@ extern int base_rvm_id;
 extern int base_trans_id;
 
 /* genertic struct to create a linked lits */
-typedef struct LinkedList {
+typedef struct LinkedListNode {
   void* pointer;
-  struct LinkedList* next;
-} LinkedList;
+  struct LinkedListNode* next;
+
+  LinkedListNode() : pointer(NULL), next(NULL) {}
+} LinkedListNode;
 
 /* */
 typedef struct rvm_t {
@@ -31,7 +33,7 @@ typedef struct rvm_t {
   // reverse mapping to memory area to segment name
   map<void*, char*>* memory_to_segname;
   // linked list of ongoing transactions (trans_t*)
-  LinkedList *transactions;
+  LinkedListNode *transactions;
 
   // default constructor overload
   rvm_t() : id(-1), directory(NULL), segname_to_memory(NULL),
@@ -76,7 +78,7 @@ typedef struct trans_t {
   // vector of all used segbase pointers
   vector<void*> *segbase_pointers;
   // linked list of all the undo logs (UndoLog*)
-  LinkedList *undo_logs;
+  LinkedListNode *undo_logs;
 
   // default constructor overload
   trans_t() : id(-1), segbase_pointers(NULL), undo_logs(NULL) {

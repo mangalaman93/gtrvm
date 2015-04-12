@@ -192,6 +192,32 @@ void rvm_destroy(rvm_t rvm, const char *segname) {
    then the call should fail and return (trans_t) -1. Note that trant_t needs
    to be able to be typecasted to an integer type */
 trans_t rvm_begin_trans(rvm_t rvm, int numsegs, void **segbases) {
+  for(int i=0; i<numsegs; i++) {
+    LinkedListNode* cur_trans = rvm.transactions;
+    while(cur_trans) {
+      for(std::vector<void*>::iterator iter = ((trans_t*)(cur_trans->pointer))->segbase_pointers->begin();
+          iter != ((trans_t*)(cur_trans->pointer))->segbase_pointers->end(); ++iter) {
+        if(*iter == segbases[i]) {
+          return *(trans_t*)(-1);
+        }
+      }
+
+      cur_trans = cur_trans->next;
+    }
+  }
+
+  trans_t *trans = new trans_t();
+  for(int i=0; i<numsegs; i++) {
+    trans->segbase_pointers->push_back(segbases[i]);
+  }
+
+  // add to rvm list
+  LinkedListNode *node = new LinkedListNode();
+  node->pointer = (void*) trans;
+  node->next = rvm.transactions;
+  rvm.transactions = node;
+
+  return *trans;
 }
 
 /* declare that the library is about to modify a specified range of memory in the
@@ -200,9 +226,10 @@ trans_t rvm_begin_trans(rvm_t rvm, int numsegs, void **segbases) {
    saved, in case an abort is executed. It is legal call rvm_about_to_modify
    multiple times on the same memory area */
 void rvm_about_to_modify(trans_t tid, void *segbase, int offset, int size) {
-  // check range if it lies in the mapped range
-  // create undo logs
-  // set the portion of segment which is to be modified until commit is called
+  // check if range lies in the mapped range
+  // If offset+size > than len(segment) return -1
+  // Append new entry to undo log: Copy value of memory to undo log (see undo log structure)
+  // segbase, offset, size, original data
 }
 
 /* commit all changes that have been made within the specified transaction. When
