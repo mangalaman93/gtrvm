@@ -19,8 +19,8 @@ int base_trans_id = 0;
 } while(0);
 
 // throws error if condition is false
-#define ASSERT(condition, message)     \
-if(!condition) {                             \
+#define ASSERT(condition, message)          \
+if(!(condition)) {                          \
   perror(message);                          \
   LOG_POS();                                \
   exit(EXIT_FAILURE);                       \
@@ -176,15 +176,32 @@ void *rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
 
 /* unmap a segment from memory */
 void rvm_unmap(rvm_t rvm, void *segbase) {
-  // make sure that no transaction is uncommited
-  // unmap, the details should be available in rvm_t data structure
+  ASSERT(rvm.memory_to_segname->count(segbase) > 0, "unable to unmap");
 
-  // free segment_copy memory_area
+  // @todo abort all the corresponding transactions
+
+  // truncate all logs
+  rvm_truncate_log(rvm);
+
+  // remove the mapping
+  char* segname = (*rvm.memory_to_segname)[segbase];
+  rvm.segname_to_memory->erase(segname);
+  rvm.memory_to_segname->erase(segbase);
+
+  // free memory
+  free(segname);
+  free(segbase);
 }
 
 /* destroy a segment completely, erasing its backing store.
-   This function should not be called on a segment that is currently mapped */
+   This function should not be called on a segment that is currently mapped,
+   must call unmap first before calling destroy */
 void rvm_destroy(rvm_t rvm, const char *segname) {
+  ASSERT(rvm.segname_to_memory->count(segname) > 0, "cannot destroy mapped segment");
+
+  stringstream ss;
+  ss<<"rm -f "<<rvm.directory<<"/"<<segname<<".log "<<rvm.directory<<"/"<<segname<<".bak";
+  system(ss.str().c_str());
 }
 
 /* begin a transaction that will modify the segments listed in segbases.

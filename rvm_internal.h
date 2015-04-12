@@ -22,14 +22,21 @@ typedef struct LinkedListNode {
   LinkedListNode() : pointer(NULL), next(NULL) {}
 } LinkedListNode;
 
-/* */
+struct CharCompare : public binary_function<const char*, const char*, bool> {
+public:
+  bool operator() (const char* str1, const char* str2) const {
+   return std::strcmp(str1, str2) < 0;
+ }
+};
+
+/* rvm struct */
 typedef struct rvm_t {
   // rvm id
   int id;
   // corresponding directory name
   char* directory;
   // mapping from segname to memory area
-  map<char*, void*>* segname_to_memory;
+  map<const char*, void*, CharCompare>* segname_to_memory;
   // reverse mapping to memory area to segment name
   map<void*, char*>* memory_to_segname;
   // linked list of ongoing transactions (trans_t*)
@@ -46,7 +53,7 @@ typedef struct rvm_t {
     id = base_rvm_id;
     directory = (char*)malloc(strlen(dir)+1);
     strcpy(directory, dir);
-    segname_to_memory = new map<char*, void*>();
+    segname_to_memory = new map<const char*, void*, CharCompare>();
     memory_to_segname = new map<void*, char*>();
     transactions = NULL;
   }
