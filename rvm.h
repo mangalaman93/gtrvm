@@ -1,9 +1,11 @@
 #ifndef __LIBRVM__
 #define __LIBRVM__
 
+#include <fstream>
 #include <iostream>
 #include <sstream>
-#include <fstream>
+#include <sys/types.h>
+#include <unistd.h>
 #include "rvm_internal.h"
 
 rvm_t rvm_init(const char *directory);

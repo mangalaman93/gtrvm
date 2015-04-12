@@ -3,6 +3,13 @@
 int base_rvm_id = 0;
 int base_trans_id = 0;
 
+// max size of a log file 4KB
+#define MAX_SIZE (1024*4)
+
+// delimiter in log file
+#define END_DEL "\r\n\t\r\n"
+#define SIZE_END_DEL 5
+
 // prefix for all the files
 #define DIR_PREFIX "/tmp"
 
@@ -54,6 +61,7 @@ void write_to_file(const char* filename, const char* src, int size) {
 
   file.write(src, size);
   ASSERT(file.good(), "unable to write to file");
+  file.flush();
   file.close();
 }
 
@@ -63,6 +71,7 @@ void append_to_file(const char* filename, const char* src, int size) {
 
   file.write(src, size);
   ASSERT(file.good(), "unable to write to file");
+  file.flush();
   file.close();
 }
 
@@ -129,8 +138,33 @@ void *rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
     }
 
     ASSERT(exists_file(lfilename), "log file should exist!");
-
     // read the log file and apply it to memory area & cleanup logs in case
+    ifstream lfile(lfilename);
+    while(lfile.good()) {
+      char sbuf[8];
+      int curren_pos = lfile.tellg();
+      lfile.read(sbuf, 8);
+      if(!lfile.good()) {
+        lfile.seekg(ios::beg);
+        truncate(lfilename, curren_pos-lfile.tellg());
+        break;
+      }
+
+      int32_t offset = *((int32_t*)(sbuf));
+      int32_t datasize = *((int32_t*)(sbuf+4));
+      char* buffer = new char[datasize+SIZE_END_DEL+1];
+      lfile.read(buffer, datasize+SIZE_END_DEL);
+      buffer[datasize+SIZE_END_DEL] = '\0';
+      if(strcmp(buffer+datasize, END_DEL) == 0) {
+        memcpy(memory_area+offset, buffer, datasize);
+      } else {
+        lfile.seekg(ios::beg);
+        truncate(lfilename, curren_pos-lfile.tellg());
+        break;
+      }
+      delete[] buffer;
+    }
+    lfile.close();
   } else {
     ASSERT(!exists_file(lfilename), "log file should not exist!");
     write_to_file(bfilename, memory_area, size_to_create);
