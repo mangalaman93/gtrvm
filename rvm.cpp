@@ -1,8 +1,12 @@
 #include "rvm.h"
 
+int base_rvm_id = 0;
+int base_trans_id = 0;
+
 /* Initialize the library with the specified directory as backing store */
 rvm_t rvm_init(const char *directory) {
-  // initialize the log segment and return ita
+  // initialize the log segment and return it
+  return rvm_t(directory);
 }
 
 /* map a segment from disk into memory. If the segment does not already exist,
@@ -14,11 +18,11 @@ void *rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
   // map the data segment to region of virtual address space
   // Read logs, if segment exists then put value in memory
   //if segment exists and is shorter than mapped value, then increase it.
-  
 }
 
 /* unmap a segment from memory */
 void rvm_unmap(rvm_t rvm, void *segbase) {
+  // make sure that no transaction is uncommited
   // unmap, the details should be available in rvm_t data structure
 }
 
