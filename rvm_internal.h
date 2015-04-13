@@ -15,23 +15,32 @@ extern int base_rvm_id;
 extern int base_trans_id;
 
 /* genertic struct to create a linked lits */
-typedef struct LinkedList {
+typedef struct LinkedListNode {
   void* pointer;
-  struct LinkedList* next;
-} LinkedList;
+  struct LinkedListNode* next;
 
-/* */
+  LinkedListNode() : pointer(NULL), next(NULL) {}
+} LinkedListNode;
+
+struct CharCompare : public binary_function<const char*, const char*, bool> {
+public:
+  bool operator() (const char* str1, const char* str2) const {
+   return std::strcmp(str1, str2) < 0;
+ }
+};
+
+/* rvm struct */
 typedef struct rvm_t {
   // rvm id
   int id;
   // corresponding directory name
   char* directory;
   // mapping from segname to memory area
-  map<char*, void*>* segname_to_memory;
+  map<const char*, void*, CharCompare>* segname_to_memory;
   // reverse mapping to memory area to segment name
   map<void*, char*>* memory_to_segname;
   // linked list of ongoing transactions (trans_t*)
-  LinkedList *transactions;
+  LinkedListNode *transactions;
 
   // default constructor overload
   rvm_t() : id(-1), directory(NULL), segname_to_memory(NULL),
@@ -44,7 +53,7 @@ typedef struct rvm_t {
     id = base_rvm_id;
     directory = (char*)malloc(strlen(dir)+1);
     strcpy(directory, dir);
-    segname_to_memory = new map<char*, void*>();
+    segname_to_memory = new map<const char*, void*, CharCompare>();
     memory_to_segname = new map<void*, char*>();
     transactions = NULL;
   }
@@ -76,7 +85,7 @@ typedef struct trans_t {
   // vector of all used segbase pointers
   vector<void*> *segbase_pointers;
   // linked list of all the undo logs (UndoLog*)
-  LinkedList *undo_logs;
+  LinkedListNode *undo_logs;
 
   // default constructor overload
   trans_t() : id(-1), segbase_pointers(NULL), undo_logs(NULL) {
