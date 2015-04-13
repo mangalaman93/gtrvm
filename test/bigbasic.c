@@ -33,44 +33,40 @@ int lastInt(char *string){
 /* proc1 writes some data, commits it, then exits */
 void proc1(int n_write)
 {
-   char* segs[1];
-   trans_t trans;
-   rvm_t rvm;
-   char *string=makeString(n_write);
-   //printf("%s\n",string);
-   int n = lastInt(string);
-   printf("%d\n",n);
-   /*rvm = rvm_init("rvm_segments");
-   rvm_destroy(rvm, "int_string");
-   segs[0] = (char *) rvm_map(rvm, "int_string", 1000000);
 
-   trans = rvm_begin_trans(rvm, 1, (void **) segs);
-   rvm_about_to_modify(trans, segs[0], 0, 1000000);
-   sprintf(segs[0], test_string);
-   rvm_commit_trans(trans);
-   */
-   abort();
+     rvm_t rvm;
+     trans_t trans;
+     char* segs[1];
+
+     rvm = rvm_init("rvm_segments");
+     rvm_destroy(rvm, "int_string");
+
+     segs[0] = (char *) rvm_map(rvm, "int_string", 1000000);
+
+     trans = rvm_begin_trans(rvm, 1, (void **) segs);
+
+     rvm_about_to_modify(trans, segs[0], 0, 1000000);
+     sprintf(segs[0], makeString(n_write));
+
+     rvm_commit_trans(trans);
+
+     abort();
+
 }
 
 /* proc2 opens the segments and reads from them */
 void proc2(int n_write)
 {
-
     char* segs[1];
     rvm_t rvm;
-    /*rvm = rvm_init("rvm_segments");
+    rvm = rvm_init("rvm_segments");
     segs[0] = (char *) rvm_map(rvm, "int_string", 1000000);
-    char* token=strtok(segs[0], " ");
-    char* last;
-    while (token){last=token;
-                  token=strtok(NULL," ");}
-    int n=atoi(last);
+    int n = lastInt(segs[0]);
     if (n == (n_write-1)){
         printf("OK");
     }else{
         printf("error:%d",n);}
-     
-     exit(0);*/
+     exit(0);
 }
 
 
@@ -82,18 +78,14 @@ int main(int argc, char **argv)
      int n = atoi(argv[1]);
 
      pid = fork();
-     if(pid < 0) {
-	  perror("fork");
-	  exit(2);
-     }
-     if(pid == 0) {
-	  proc1(n);
-	  exit(0);
-     }
-     //sleep(2);
+     if(pid < 0) {perror("fork");
+	          exit(2);}
+     if(pid == 0){proc1(n);
+	          exit(0);}
+     waitpid(pid,NULL,0);//sleep(2);
      //kill(pid,SIGKILL);
 
-     //proc2(n);
+     proc2(n);
 
      return 0;
 }
