@@ -1,4 +1,4 @@
-/* crash.c - test that checks persistency on crash */
+/* crash.c - test that checks persistency on crash while committing */
 
 #include <unistd.h>
 #include <stdio.h>
