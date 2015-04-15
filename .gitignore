@@ -30,6 +30,9 @@
 # Test Executables
 abort
 basic
+bigbasic
+crash
+incomplete
 multi-abort
 multi
-truncate
+truncate write

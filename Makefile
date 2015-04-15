@@ -12,7 +12,7 @@ LIB_SRC = rvm.cpp
 LIB_OBJ = $(patsubst %.cpp,%.o,$(LIB_SRC))
 
 TEST = test
-_OBJ = abort basic multi-abort multi truncate crash
+_OBJ = abort basic bigbasic crash incomplete multi-abort multi truncate write
 OBJ = $(patsubst %,$(TEST)/%.o,$(_OBJ))
 
 all: $(LIBRARY) $(OBJ) $(_OBJ)
@@ -30,4 +30,4 @@ $(LIBRARY): $(LIB_OBJ)
 clean:
 	$(RM) $(LIBRARY) $(LIB_OBJ)
 	$(RM) $(TEST)/*.o
-	$(RM) abort basic multi-abort multi truncate crash
+	$(RM) abort basic bigbasic crash incomplete multi-abort multi truncate write
