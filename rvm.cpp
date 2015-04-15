@@ -1,7 +1,7 @@
 #include "rvm.h"
 
 int base_rvm_id = 0;
-int base_trans_id = 0;
+int4_t base_trans_id = 0;
 
 // max size of a log file 256KB
 #define MAX_SIZE (1024*256)
