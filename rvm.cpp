@@ -1,14 +1,14 @@
 #include "rvm.h"
 
 int base_rvm_id = 0;
-int4_t base_trans_id = 0;
-
-// max size of a log file 256KB
-#define MAX_SIZE (1024*256)
+int64_t base_trans_id = 0;
 
 // prefix for all the files
 #define DIR_PREFIX "/tmp"
 #define INDEX_FILE ".index"
+
+// delimiter
+const char DELIMITER[9] = "\r\n\r\n\r\n\r\n";
 
 // logs current position in file
 #define LOG_POS() do {                                  \
@@ -84,6 +84,8 @@ void read_from_file(const char* filename, char* dest, int size) {
 
 /* Initialize the library with the specified directory as backing store */
 rvm_t rvm_init(const char *directory) {
+  rvm_t rvm(directory);
+
   // initialize the log segment and return it
   stringstream ss;
   ss<<DIR_PREFIX<<"/"<<directory;
@@ -98,7 +100,7 @@ rvm_t rvm_init(const char *directory) {
     index.close();
 
     // if corrupt
-    int temp = (size)%5;
+    int temp = (size)%9;
     if(temp != 0) {
       truncate(ss.str().c_str(), size-temp);
     } else {
@@ -112,9 +114,14 @@ rvm_t rvm_init(const char *directory) {
       indexfile.read(buffer, size);
       indexfile.close();
 
-      for(int i=0; i<(size/5); i++) {
-        if(buffer[i*5+4] == ',') {
-          int temp = *((int32_t*)(buffer[i*5]));
+      for(unsigned int i=0; i<(size/5); i++) {
+        if(buffer[i*9+8] == ',') {
+          int64_t temp = *((int64_t*)(buffer[i*9]));
+
+          if(rvm.presentTx.count(temp) > 0) {
+            rvm.presentTx[temp] = true;
+          }
+
           if(temp < base_trans_id) {
             base_trans_id = temp;
           }
@@ -127,8 +134,7 @@ rvm_t rvm_init(const char *directory) {
     create_file(ss.str().c_str());
   }
 
-  // init rvm_t
-  return rvm_t(directory);
+  return rvm;
 }
 
 /* map a segment from disk into memory. If the segment does not already exist,
@@ -136,7 +142,7 @@ rvm_t rvm_init(const char *directory) {
    is shorter than size_to_create, then extend it until it is long enough.
    It is an error to try to map the same segment twice */
 void *rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
-  char* segname_copy = (char*)malloc(strlen(segname)+1);
+  char* segname_copy = new char[strlen(segname)+1];
   strcpy(segname_copy, segname);
 
   // should be unmapped
@@ -144,10 +150,11 @@ void *rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
               "trying to map the same segment again");
 
   // allocate memory area
-  char* memory_area = (char*)malloc(size_to_create);
+  char* memory_area = new char[size_to_create];
   bzero(memory_area, size_to_create);
   (*rvm.segname_to_memory)[segname_copy] = memory_area;
   (*rvm.memory_to_segname)[memory_area] = segname_copy;
+  (*rvm.memory_to_size)[memory_area] = size_to_create;
 
   // backing file name
   stringstream ss;
@@ -184,10 +191,8 @@ void *rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
     lfile.read(buffer, size);
     lfile.close();
 
-    const char DELIMITER[8] = "\r\n\r\n\r\n\r\n";
-
-    for(int i=0; i<size; i++) {
-      int j;
+    for(unsigned int i=0; i<size; i++) {
+      unsigned int j;
       bool flag = true;
       for(j=i; j<size; j++) {
         if((buffer[j] == '\r') && (memcmp(buffer+j, DELIMITER, 8)==0)) {
@@ -197,7 +202,7 @@ void *rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
       }
 
       if(flag) {
-        truncate(lfile.str().c_str(), i);
+        truncate(lfilename, i);
         break;
       }
 
@@ -206,6 +211,12 @@ void *rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
       i += 8;
 
       // check if transaction id is present in the index
+      if(rvm.presentTx.count(tid) > 0 && rvm.presentTx[tid]) {
+        // nothing
+      } else {
+        i = j + 8 - 1;
+        continue;
+      }
 
       // if present apply
       while(i < j) {
@@ -213,7 +224,7 @@ void *rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
         int32_t datasize = *((int32_t*)(buffer[i+4]));
         i += 8;
 
-        memcpy(memory_area+offset, buffer[i], datasize);
+        memcpy(memory_area+offset, buffer+i, datasize);
         i += datasize;
       }
     }
@@ -232,19 +243,15 @@ void *rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
 void rvm_unmap(rvm_t rvm, void *segbase) {
   ASSERT(rvm.memory_to_segname->count(segbase) > 0, "unable to unmap");
 
-  // @todo abort all the corresponding transactions
-
-  // truncate all logs
-  rvm_truncate_log(rvm);
-
   // remove the mapping
   char* segname = (*rvm.memory_to_segname)[segbase];
   rvm.segname_to_memory->erase(segname);
   rvm.memory_to_segname->erase(segbase);
+  rvm.memory_to_size->erase(segbase);
 
   // free memory
-  free(segname);
-  free(segbase);
+  delete ((char*)segbase);
+  delete ((char*)segname);
 }
 
 /* destroy a segment completely, erasing its backing store.
@@ -278,6 +285,7 @@ trans_t rvm_begin_trans(rvm_t rvm, int numsegs, void **segbases) {
   }
 
   trans_t *trans = new trans_t();
+  trans->rvm = &rvm;
   for(int i=0; i<numsegs; i++) {
     trans->segbase_pointers->push_back(segbases[i]);
   }
@@ -288,6 +296,11 @@ trans_t rvm_begin_trans(rvm_t rvm, int numsegs, void **segbases) {
   node->next = rvm.transactions;
   rvm.transactions = node;
 
+  // add transaction into the index file
+  stringstream ss;
+  ss<<DIR_PREFIX<<"/"<<rvm.directory<<"/"<<INDEX_FILE;
+  append_to_file(ss.str().c_str(), (char*)(&trans->id), 8);
+
   return *trans;
 }
 
@@ -297,9 +310,11 @@ trans_t rvm_begin_trans(rvm_t rvm, int numsegs, void **segbases) {
    saved, in case an abort is executed. It is legal call rvm_about_to_modify
    multiple times on the same memory area */
 void rvm_about_to_modify(trans_t tid, void *segbase, int offset, int size) {
-  // @todo check if range lies in the mapped range
+  // check if range lies in the mapped range
+  if((*tid.rvm->memory_to_size)[segbase] <= offset+size) {
+    return;
+  }
 
-  // If offset+size > than len(segment) return -1
   // Append new entry to undo log: Copy value of memory to undo log (see undo log structure)
   UndoLog *ul = new UndoLog();
   ul->base = segbase;
@@ -311,10 +326,10 @@ void rvm_about_to_modify(trans_t tid, void *segbase, int offset, int size) {
   memcpy(data, segbase, size);
   ul->data = data;
 
-  LinkedListNode *node = LinkedListNode();
+  LinkedListNode *node = new LinkedListNode();
   node->pointer = ul;
-  node->next = tid->undo_logs;
-  tid->undo_logs = node;
+  node->next = tid.undo_logs;
+  tid.undo_logs = node;
 }
 
 /* commit all changes that have been made within the specified transaction. When
@@ -328,19 +343,21 @@ void rvm_commit_trans(trans_t tid) {
 /* undo all changes that have happened within the specified transaction */
 void rvm_abort_trans(trans_t tid) {
   // throw away the redo logs & apply undo logs
-  LinkedListNode *cur = cur->undo_logs;
+  LinkedListNode *cur = tid.undo_logs;
   while(cur) {
-    memcpy(cur->base+cur->offset, cur->data, cur->size);
-    delete[] data;
+    UndoLog* ul = (UndoLog*)cur->pointer;
+    memcpy(ul->base+ul->offset, ul->data, ul->size);
+    delete[] ul->data;
 
-    temp = cur;
-    delete temp;
-
+    LinkedListNode *temp = cur;
     cur = cur->next;
+
+    delete ul;
+    delete temp;
   }
 
   // @todo remove transaction from the corresponding rvm
-  delete tid;
+  delete (&tid);
 }
 
 /* play through any committed or aborted items in the log file(s) and

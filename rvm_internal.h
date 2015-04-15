@@ -35,6 +35,55 @@ public:
  }
 };
 
+struct rvm_t;
+
+typedef struct UndoLog {
+  void* base;
+  int32_t offset;
+  int32_t size;
+  char* data;
+
+  UndoLog() : base(NULL), offset(0), size(0), data(NULL) {}
+} UndoLog;
+
+typedef struct trans_t {
+  // rvm pointer
+  struct rvm_t *rvm;
+  // transaction id
+  int64_t id;
+  // vector of all used segbase pointers
+  vector<void*> *segbase_pointers;
+  // linked list of all the undo logs (UndoLog*)
+  LinkedListNode *undo_logs;
+
+  // default constructor overload
+  trans_t() : rvm(NULL), id(0), segbase_pointers(NULL), undo_logs(NULL) {
+    base_trans_id += 1;
+    id = base_trans_id;
+    segbase_pointers = new vector<void*>();
+  }
+
+  // destructor
+  ~trans_t() {
+    delete segbase_pointers;
+
+    while(undo_logs) {
+      delete[] ((UndoLog*)(undo_logs->pointer))->data;
+
+      LinkedListNode* node = undo_logs;
+      undo_logs = node->next;
+      delete ((UndoLog*)node->pointer);
+      delete node;
+    }
+  }
+
+  // cast to int
+  operator int() const {
+    return id;
+  }
+} trans_t;
+
+
 /* rvm struct */
 typedef struct rvm_t {
   // rvm id
@@ -46,9 +95,11 @@ typedef struct rvm_t {
   // reverse mapping to memory area to segment name
   map<void*, char*>* memory_to_segname;
   // memory to its size
-  map<void*, int> memory_to_size;
+  map<void*, int>* memory_to_size;
   // linked list of ongoing transactions (trans_t*)
   LinkedListNode *transactions;
+  // all transaction tree
+  map<int, bool> presentTx;
 
   // default constructor overload
   rvm_t() : id(0), directory(NULL), segname_to_memory(NULL),
@@ -73,13 +124,13 @@ typedef struct rvm_t {
     // deleting data areas & corresponding segment string
     for(map<void*, char*>::iterator iter=memory_to_segname->begin();
         iter!=memory_to_segname->end(); ++iter) {
-      delete[] iter->first;
+      delete[] ((char*)iter->first);
       delete[] iter->second;
     }
 
     // deleting if any transaction is incomplete
     while(transactions) {
-      delete transactions->pointer;
+      delete ((struct trans_t*)transactions->pointer);
 
       LinkedListNode *node = transactions;
       transactions = node->next;
@@ -96,48 +147,3 @@ typedef struct rvm_t {
     return id;
   }
 } rvm_t;
-
-typedef struct UndoLog {
-  void* base;
-  int32_t offset;
-  int32_t size;
-  void* data;
-
-  UndoLog() : base(NULL), offset(0), size(0), data(NULL) {}
-} UndoLog;
-
-typedef struct trans_t {
-  // rvm pointer
-  rvm_t *rvm;
-  // transaction id
-  int64_t id;
-  // vector of all used segbase pointers
-  vector<void*> *segbase_pointers;
-  // linked list of all the undo logs (UndoLog*)
-  LinkedListNode *undo_logs;
-
-  // default constructor overload
-  trans_t() : rvm(NULL), id(0), segbase_pointers(NULL), undo_logs(NULL) {
-    base_trans_id += 1;
-    id = base_trans_id;
-    segbase_pointers = new vector<void*>();
-  }
-
-  // destructor
-  ~trans_t() {
-    delete segbase_pointers;
-
-    while(undo_logs) {
-      delete[] undo_logs->data;
-
-      LinkedListNode node = undo_logs;
-      undo_logs = node->next;
-      delete node;
-    }
-  }
-
-  // cast to int
-  operator int() const {
-    return id;
-  }
-} trans_t;
