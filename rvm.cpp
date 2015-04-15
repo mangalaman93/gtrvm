@@ -3,19 +3,16 @@
 int base_rvm_id = 0;
 int base_trans_id = 0;
 
-// max size of a log file 4KB
-#define MAX_SIZE (1024*4)
-
-// delimiter in log file
-#define END_DEL "\r\n\t\r\n"
-#define SIZE_END_DEL 5
+// max size of a log file 256KB
+#define MAX_SIZE (1024*256)
 
 // prefix for all the files
 #define DIR_PREFIX "/tmp"
+#define INDEX_FILE ".index"
 
 // logs current position in file
-#define LOG_POS() do {\
-  cout<<"line:"<<__LINE__<<" in file:"<<__FILE__<<endl;\
+#define LOG_POS() do {                                  \
+  cout<<"line:"<<__LINE__<<" in file:"<<__FILE__<<endl; \
 } while(0);
 
 // throws error if condition is false
@@ -89,8 +86,46 @@ void read_from_file(const char* filename, char* dest, int size) {
 rvm_t rvm_init(const char *directory) {
   // initialize the log segment and return it
   stringstream ss;
-  ss<<"make -p "<<DIR_PREFIX<<"/"<<directory;
-  system(ss.str().c_str());
+  ss<<DIR_PREFIX<<"/"<<directory;
+  mkdir(ss.str().c_str(), 0755);
+
+  // reading the index file and setting the transaction numbers
+  ss<<"/"<<INDEX_FILE;
+  ifstream index(ss.str().c_str());
+  if(index) {
+    index.seekg(0, ios::end);
+    size_t size = index.tellg();
+    index.close();
+
+    // if corrupt
+    int temp = (size)%5;
+    if(temp != 0) {
+      truncate(ss.str().c_str(), size-temp);
+    } else {
+      index.close();
+    }
+
+    // finding last max transaction id
+    ifstream indexfile(ss.str().c_str());
+    if(size != 0) {
+      char* buffer = new char[size];
+      indexfile.read(buffer, size);
+      indexfile.close();
+
+      for(int i=0; i<(size/5); i++) {
+        if(buffer[i*5+4] == ',') {
+          int temp = *((int32_t*)(buffer[i*5]));
+          if(temp < base_trans_id) {
+            base_trans_id = temp;
+          }
+        }
+      }
+
+      delete[] buffer;
+    }
+  } else {
+    create_file(ss.str().c_str());
+  }
 
   // init rvm_t
   return rvm_t(directory);
@@ -124,6 +159,7 @@ void *rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
   st<<DIR_PREFIX<<"/"<<rvm.directory<<"/"<<segname_copy<<".log";
   const char* lfilename = st.str().c_str();
 
+  // read the file in memory if it already exists
   if(exists_file(bfilename)) {
     long fsize = get_file_size(bfilename);
 
@@ -140,31 +176,49 @@ void *rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
     ASSERT(exists_file(lfilename), "log file should exist!");
     // read the log file and apply it to memory area & cleanup logs in case
     ifstream lfile(lfilename);
-    while(lfile.good()) {
-      char sbuf[8];
-      int curren_pos = lfile.tellg();
-      lfile.read(sbuf, 8);
-      if(!lfile.good()) {
-        lfile.seekg(ios::beg);
-        truncate(lfilename, curren_pos-lfile.tellg());
+    lfile.seekg(0, ios::end);
+    size_t size = lfile.tellg();
+    lfile.seekg(0, ios::beg);
+
+    char* buffer = new char[size];
+    lfile.read(buffer, size);
+    lfile.close();
+
+    const char DELIMITER[8] = "\r\n\r\n\r\n\r\n";
+
+    for(int i=0; i<size; i++) {
+      int j;
+      bool flag = true;
+      for(j=i; j<size; j++) {
+        if((buffer[j] == '\r') && (memcmp(buffer+j, DELIMITER, 8)==0)) {
+          flag = false;
+          break;
+        }
+      }
+
+      if(flag) {
+        truncate(lfile.str().c_str(), i);
         break;
       }
 
-      int32_t offset = *((int32_t*)(sbuf));
-      int32_t datasize = *((int32_t*)(sbuf+4));
-      char* buffer = new char[datasize+SIZE_END_DEL+1];
-      lfile.read(buffer, datasize+SIZE_END_DEL);
-      buffer[datasize+SIZE_END_DEL] = '\0';
-      if(strcmp(buffer+datasize, END_DEL) == 0) {
-        memcpy(memory_area+offset, buffer, datasize);
-      } else {
-        lfile.seekg(ios::beg);
-        truncate(lfilename, curren_pos-lfile.tellg());
-        break;
+      // getting transaction id
+      int64_t tid = *((int64_t*)(buffer[i]));
+      i += 8;
+
+      // check if transaction id is present in the index
+
+      // if present apply
+      while(i < j) {
+        int32_t offset = *((int32_t*)(buffer[i]));
+        int32_t datasize = *((int32_t*)(buffer[i+4]));
+        i += 8;
+
+        memcpy(memory_area+offset, buffer[i], datasize);
+        i += datasize;
       }
-      delete[] buffer;
     }
-    lfile.close();
+
+    delete[] buffer;
   } else {
     ASSERT(!exists_file(lfilename), "log file should not exist!");
     write_to_file(bfilename, memory_area, size_to_create);

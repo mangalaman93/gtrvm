@@ -1,18 +1,24 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <string>
+#include <fstream>
+#include <iostream>
 #include <map>
+#include <sstream>
+#include <string>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <vector>
 using namespace std;
 
-/* we assign rvm ids randomly but every new id
+/* we assign rvm ids incrementally and every new id
    is bigger than highest assigned id till now */
 extern int base_rvm_id;
 
-/* similar to rvm ids, we assign transaction ids randomly
-   but in a monotonically incremental way */
-extern int base_trans_id;
+/* similar to rvm ids, we assign transaction ids incrementally
+   and in a monotonically incremental way */
+extern long int base_trans_id;
 
 /* genertic struct to create a linked lits */
 typedef struct LinkedListNode {
@@ -49,7 +55,7 @@ typedef struct rvm_t {
   // constructor
   rvm_t(const char* dir) : id(-1), directory(NULL), segname_to_memory(NULL),
                            memory_to_segname(NULL), transactions(NULL) {
-    base_rvm_id += 1 + (lrand48()%100);
+    base_rvm_id += 1;
     id = base_rvm_id;
     directory = (char*)malloc(strlen(dir)+1);
     strcpy(directory, dir);
@@ -74,14 +80,14 @@ typedef struct rvm_t {
 
 typedef struct UndoLog {
   void* base;
-  int offset;
+  int32_t offset;
   size_t size;
   void* data;
 } UndoLog;
 
 typedef struct trans_t {
   // transaction id
-  int id;
+  long int id;
   // vector of all used segbase pointers
   vector<void*> *segbase_pointers;
   // linked list of all the undo logs (UndoLog*)
@@ -89,7 +95,7 @@ typedef struct trans_t {
 
   // default constructor overload
   trans_t() : id(-1), segbase_pointers(NULL), undo_logs(NULL) {
-    base_trans_id += 1 + (lrand48()%100);
+    base_trans_id += 1;
     id = base_trans_id;
     segbase_pointers = new vector<void*>();
   }
