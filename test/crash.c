@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <signal.h>
@@ -53,7 +54,9 @@ void proc1(int n_write)
 
      trans = rvm_begin_trans(rvm, 1, (void **) segs);
      rvm_about_to_modify(trans, segs[0], 0, 1000000);
-     sprintf(segs[0], makeString(n_write));
+     char* str;
+     str=makeString(n_write);
+     sprintf(segs[0],str);
 
      //make this atomic?
      rvm_commit_trans(trans);
@@ -71,10 +74,10 @@ void proc2(int n_write)
     rvm = rvm_init("rvm_segments");
     segs[0] = (char *) rvm_map(rvm, "int_string", 1000000);
     int n = lastInt(segs[0]);
-    if (glob_var == n){
+    if (*glob_var == n){
        printf("OK");
     }else{
-       if (glob_var==1){
+       if (*glob_var==1){
          //we crashed
          if (n==0){
            //we recovered from crash
@@ -95,7 +98,7 @@ int main(int argc, char **argv)
          return -1;}
      int pid;
      int n = atoi(argv[1]);
-     glob_var = mmap(NULL, sizeof *glob_var, PROT_READ | PROT_WRITE, 
+     glob_var = (int*) mmap(NULL, sizeof *glob_var, PROT_READ | PROT_WRITE, 
                     MAP_SHARED | MAP_ANONYMOUS, -1, 0);
      *glob_var=1;
      pid = fork();
