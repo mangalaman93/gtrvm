@@ -297,10 +297,24 @@ trans_t rvm_begin_trans(rvm_t rvm, int numsegs, void **segbases) {
    saved, in case an abort is executed. It is legal call rvm_about_to_modify
    multiple times on the same memory area */
 void rvm_about_to_modify(trans_t tid, void *segbase, int offset, int size) {
-  // check if range lies in the mapped range
+  // @todo check if range lies in the mapped range
+
   // If offset+size > than len(segment) return -1
   // Append new entry to undo log: Copy value of memory to undo log (see undo log structure)
-  // segbase, offset, size, original data
+  UndoLog *ul = new UndoLog();
+  ul->base = segbase;
+  ul->offset = offset;
+  ul->size = size;
+
+  // copying data;
+  char *data = new char[size];
+  memcpy(data, segbase, size);
+  ul->data = data;
+
+  LinkedListNode *node = LinkedListNode();
+  node->pointer = ul;
+  node->next = tid->undo_logs;
+  tid->undo_logs = node;
 }
 
 /* commit all changes that have been made within the specified transaction. When
@@ -313,7 +327,20 @@ void rvm_commit_trans(trans_t tid) {
 
 /* undo all changes that have happened within the specified transaction */
 void rvm_abort_trans(trans_t tid) {
-  // throw away the redo logs
+  // throw away the redo logs & apply undo logs
+  LinkedListNode *cur = cur->undo_logs;
+  while(cur) {
+    memcpy(cur->base+cur->offset, cur->data, cur->size);
+    delete[] data;
+
+    temp = cur;
+    delete temp;
+
+    cur = cur->next;
+  }
+
+  // @todo remove transaction from the corresponding rvm
+  delete tid;
 }
 
 /* play through any committed or aborted items in the log file(s) and
