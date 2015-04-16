@@ -176,8 +176,8 @@ void* rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
 
       // applying the log to memory area (not backing file)
       while(i < j) {
-        int32_t offset = *((int32_t*)(buffer[i]));
-        int32_t datasize = *((int32_t*)(buffer[i+4]));
+        int32_t offset = *((int32_t*)(&buffer[i]));
+        int32_t datasize = *((int32_t*)(&buffer[i+4]));
         i += 8;
 
         memcpy(memory_area+offset, buffer+i, datasize);
