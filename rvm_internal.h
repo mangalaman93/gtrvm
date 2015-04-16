@@ -14,20 +14,13 @@ using namespace std;
 
 /* we assign rvm ids incrementally and every new id
    is bigger than highest assigned id till now */
-extern int base_rvm_id;
+int base_rvm_id = 0;
 
 /* similar to rvm ids, we assign transaction ids incrementally
    and in a monotonically incremental way */
-extern int64_t base_trans_id;
+int base_trans_id = 0;
 
-/* genertic struct to create a linked lits */
-typedef struct LinkedListNode {
-  void* pointer;
-  struct LinkedListNode* next;
-
-  LinkedListNode() : pointer(NULL), next(NULL) {}
-} LinkedListNode;
-
+// for map
 struct CharCompare : public binary_function<const char*, const char*, bool> {
 public:
   bool operator() (const char* str1, const char* str2) const {
@@ -35,16 +28,35 @@ public:
  }
 };
 
+// to remove circular depedency
 struct rvm_t;
 
+// struct for Undo Logs
 typedef struct UndoLog {
-  void* base;
   int32_t offset;
   int32_t size;
   char* data;
 
-  UndoLog() : base(NULL), offset(0), size(0), data(NULL) {}
+  UndoLog() : offset(0), size(0), data(NULL) {}
 } UndoLog;
+
+/* struct to create a linked list of UndoLog */
+typedef struct UndoLogNode {
+  UndoLog* pointer;
+  struct UndoLogNode* next;
+
+  UndoLogNode() : pointer(NULL), next(NULL) {}
+} UndoLogNode;
+
+typedef struct segment_t {
+  int size;
+  bool modify;
+  char* segname;
+  UndoLogNode* undo_logs;
+
+  segment_t(int s, bool m, char* n)
+    : size(s), modify(m), segname(n), undo_logs(NULL) {}
+} segment_t;
 
 typedef struct trans_t {
   // rvm pointer
@@ -53,11 +65,9 @@ typedef struct trans_t {
   int64_t id;
   // vector of all used segbase pointers
   vector<void*> *segbase_pointers;
-  // linked list of all the undo logs (UndoLog*)
-  LinkedListNode *undo_logs;
 
   // default constructor overload
-  trans_t() : rvm(NULL), id(0), segbase_pointers(NULL), undo_logs(NULL) {
+  trans_t() : rvm(NULL), id(0), segbase_pointers(NULL) {
     base_trans_id += 1;
     id = base_trans_id;
     segbase_pointers = new vector<void*>();
@@ -66,15 +76,6 @@ typedef struct trans_t {
   // destructor
   ~trans_t() {
     delete segbase_pointers;
-
-    while(undo_logs) {
-      delete[] ((UndoLog*)(undo_logs->pointer))->data;
-
-      LinkedListNode* node = undo_logs;
-      undo_logs = node->next;
-      delete ((UndoLog*)node->pointer);
-      delete node;
-    }
   }
 
   // cast to int
@@ -83,7 +84,6 @@ typedef struct trans_t {
   }
 } trans_t;
 
-
 /* rvm struct */
 typedef struct rvm_t {
   // rvm id
@@ -91,55 +91,48 @@ typedef struct rvm_t {
   // corresponding directory name
   char* directory;
   // mapping from segname to memory area
-  map<const char*, void*, CharCompare>* segname_to_memory;
+  map<const char*, char*, CharCompare>* segname_to_memory;
   // reverse mapping to memory area to segment name
-  map<void*, char*>* memory_to_segname;
-  // memory to its size
-  map<void*, int>* memory_to_size;
-  // linked list of ongoing transactions (trans_t*)
-  LinkedListNode *transactions;
-  // all transaction tree
-  map<int, bool> presentTx;
+  map<char*, segment_t*>* memory_to_struct;
 
   // default constructor overload
   rvm_t() : id(0), directory(NULL), segname_to_memory(NULL),
-            memory_to_segname(NULL), memory_to_size(NULL), transactions(NULL) {}
+            memory_to_struct(NULL) {}
 
   // constructor
   rvm_t(const char* dir) : id(-1), directory(NULL), segname_to_memory(NULL),
-                           memory_to_segname(NULL), memory_to_size(NULL), transactions(NULL) {
+                           memory_to_struct(NULL) {
     base_rvm_id += 1;
     id = base_rvm_id;
     directory = new char[strlen(dir)+1];
     strcpy(directory, dir);
-    segname_to_memory = new map<const char*, void*, CharCompare>();
-    memory_to_segname = new map<void*, char*>();
-    memory_to_size = new map<void*, int>();
-    transactions = NULL;
+    segname_to_memory = new map<const char*, char*, CharCompare>();
+    memory_to_struct = new map<char*, segment_t*>();
   }
 
   ~rvm_t() {
     delete[] directory;
-
-    // deleting data areas & corresponding segment string
-    for(map<void*, char*>::iterator iter=memory_to_segname->begin();
-        iter!=memory_to_segname->end(); ++iter) {
-      delete[] ((char*)iter->first);
-      delete[] iter->second;
-    }
-
-    // deleting if any transaction is incomplete
-    while(transactions) {
-      delete ((struct trans_t*)transactions->pointer);
-
-      LinkedListNode *node = transactions;
-      transactions = node->next;
-      delete node;
-    }
-
     delete segname_to_memory;
-    delete memory_to_segname;
-    delete memory_to_size;
+
+    // deleting data areas & corresponding segment string & undo logs
+    for(map<char*, segment_t*>::iterator iter=memory_to_struct->begin();
+        iter!=memory_to_struct->end(); ++iter) {
+      UndoLogNode *undo_logs = iter->second->undo_logs;
+      while(undo_logs) {
+        delete[] undo_logs->pointer->data;
+
+        UndoLogNode* node = undo_logs;
+        undo_logs = node->next;
+        delete node->pointer;
+        delete node;
+      }
+
+      delete[] ((char*)iter->first);
+      delete[] iter->second->segname;
+      delete iter->second;
+    }
+
+    delete memory_to_struct;
   }
 
   // cast to int
