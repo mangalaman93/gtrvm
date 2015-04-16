@@ -125,12 +125,14 @@ void* rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
   // backing file name
   stringstream ss;
   ss<<DIR_PREFIX<<"/"<<r->directory<<"/"<<segname_copy<<".bak";
-  const char* bfilename = ss.str().c_str();
+  string bs(ss.str());
+  const char* bfilename = bs.c_str();
 
   // log file name
   stringstream st;
   st<<DIR_PREFIX<<"/"<<r->directory<<"/"<<segname_copy<<".log";
-  const char* lfilename = st.str().c_str();
+  string ls(st.str());
+  const char* lfilename = ls.c_str();
 
   // read the file in memory if it already exists
   if(exists_file(bfilename)) {
