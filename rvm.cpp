@@ -226,11 +226,9 @@ void rvm_destroy(rvm_t rvm, const char *segname) {
   // getting pointer to internal rvm data structure
   rvm_int_t *r = rvms[rvm];
 
-  if(r->segname_to_memory->count(segname) > 0) {
-    stringstream ss;
-    ss<<"rm -f "<<r->directory<<"/"<<segname<<".log "<<r->directory<<"/"<<segname<<".bak";
-    system(ss.str().c_str());
-  }
+  stringstream ss;
+  ss<<"rm -f "<<r->directory<<"/"<<segname<<".log "<<r->directory<<"/"<<segname<<".bak";
+  system(ss.str().c_str());
 }
 
 /* begin a transaction that will modify the segments listed in segbases.
@@ -313,7 +311,7 @@ void rvm_commit_trans(trans_t tid) {
 
       file.write((char*)(&(log->offset)), 4);
       file.write((char*)(&(log->size)), 4);
-      file.write(log->data, log->size);
+      file.write((*iter) + log->offset, log->size);
 
       UndoLogNode *node = seg->undo_logs;
       seg->undo_logs = node->next;
