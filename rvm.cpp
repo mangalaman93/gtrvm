@@ -227,7 +227,8 @@ void rvm_destroy(rvm_t rvm, const char *segname) {
   rvm_int_t *r = rvms[rvm];
 
   stringstream ss;
-  ss<<"rm -f "<<r->directory<<"/"<<segname<<".log "<<r->directory<<"/"<<segname<<".bak";
+
+  ss<<"rm -f "<<DIR_PREFIX<<"/"<<r->directory<<"/"<<segname<<".log "<<DIR_PREFIX<<"/"<<r->directory<<"/"<<segname<<".bak";
   system(ss.str().c_str());
 }
 
