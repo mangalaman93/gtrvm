@@ -363,6 +363,32 @@ void rvm_commit_trans(trans_t tid) {
   ofstream file(ss.str().c_str(), ios::app);
   file.write((char*)(&(tid.id)), 8);
   file.close();
+
+  // remove transaction from the corresponding rvm
+  LinkedListNode* cur = tid.rvm->transactions;
+  ASSERT(cur, "transactions cannot be NULL");
+
+  // check the first element
+  trans_t *trans = (trans_t*)cur->pointer;
+  if(trans->id == tid.id) {
+    tid.rvm->transactions = NULL;
+  }
+
+  LinkedListNode* prev = cur;
+  cur = cur->next;
+
+  while(cur) {
+    trans_t *trans = (trans_t*)cur->pointer;
+    if(trans->id == tid.id) {
+      prev->next = cur->next;
+      delete trans;
+      delete cur;
+      break;
+    }
+
+    prev = cur;
+    cur = cur->next;
+  }
 }
 
 /* undo all changes that have happened within the specified transaction */
@@ -381,7 +407,31 @@ void rvm_abort_trans(trans_t tid) {
     delete temp;
   }
 
-  // @todo remove transaction from the corresponding rvm
+  // remove transaction from the corresponding rvm
+  cur = tid.rvm->transactions;
+  ASSERT(cur, "transactions cannot be NULL");
+
+  // check the first element
+  trans_t *trans = (trans_t*)cur->pointer;
+  if(trans->id == tid.id) {
+    tid.rvm->transactions = NULL;
+  }
+
+  LinkedListNode* prev = cur;
+  cur = cur->next;
+
+  while(cur) {
+    trans_t *trans = (trans_t*)cur->pointer;
+    if(trans->id == tid.id) {
+      prev->next = cur->next;
+      delete trans;
+      delete cur;
+      break;
+    }
+
+    prev = cur;
+    cur = cur->next;
+  }
 }
 
 /* play through any committed or aborted items in the log file(s) and
