@@ -20,7 +20,7 @@ all: $(LIBRARY) $(OBJ) $(_OBJ)
 %.o: %.cpp
 	$(CC) -c $(CFLAGS) $< -o $@
 
-%: $(TEST)/%.o
+%: $(TEST)/%.o $(LIBRARY)
 	$(CC) -L./ $(CFLAGS) $< -o $@ -lrvm
 
 $(LIBRARY): $(LIB_OBJ)
