@@ -336,8 +336,33 @@ void rvm_about_to_modify(trans_t tid, void *segbase, int offset, int size) {
    the call returns, then enough information should have been saved to disk so that,
    even if the program crashes, the changes will be seen by the program when it restarts */
 void rvm_commit_trans(trans_t tid) {
-  // commit the redo logs to persistent memory
-  // throw away the undo logs
+  while(tid.undo_logs) {
+    UndoLog *log = (UndoLog*)(tid.undo_logs->pointer);
+    char* segname = (*tid.rvm->memory_to_segname)[log->base];
+    stringstream ss;
+    ss<<DIR_PREFIX<<"/"<<tid.rvm->directory<<"/"<<segname<<".log";
+
+    ofstream file(ss.str().c_str(), ios::app);
+    file.write((char*)(&(tid.id)), 8);
+    file.write((char*)(&(log->offset)), 4);
+    file.write((char*)(&(log->size)), 4);
+    file.write(log->data, log->size);
+    file.write(DELIMITER, 8);
+    file.flush();
+    file.close();
+
+    LinkedListNode *node = tid.undo_logs;
+    tid.undo_logs = node->next;
+    delete[] ((char*)log->data);
+    delete log;
+    delete node;
+  }
+
+  stringstream ss;
+  ss<<DIR_PREFIX<<"/"<<tid.rvm->directory<<"/"<<INDEX_FILE;
+  ofstream file(ss.str().c_str(), ios::app);
+  file.write((char*)(&(tid.id)), 8);
+  file.close();
 }
 
 /* undo all changes that have happened within the specified transaction */
@@ -357,7 +382,6 @@ void rvm_abort_trans(trans_t tid) {
   }
 
   // @todo remove transaction from the corresponding rvm
-  delete (&tid);
 }
 
 /* play through any committed or aborted items in the log file(s) and

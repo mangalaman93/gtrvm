@@ -35,4 +35,5 @@ crash
 incomplete
 multi-abort
 multi
-truncate write
+truncate
+write
