@@ -111,7 +111,7 @@ void* rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
   rvm_int_t *r = rvms[rvm];
 
   // should be unmapped
-  if(!(r->segname_to_memory->count(segname_copy) > 0)) {
+  if(r->segname_to_memory->count(segname_copy) > 0) {
     return NULL;
   }
 
