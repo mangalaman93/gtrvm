@@ -14,13 +14,13 @@ const char DELIMITER[9] = "\r\n\r\n\r\n\r\n";
 
 // logs current position in file
 #define LOG_POS() do {                                  \
-  cout<<"line:"<<__LINE__<<" in file:"<<__FILE__<<endl; \
+  printf("line:%d in file:%s\n", __LINE__, __FILE__);   \
 } while(0);
 
 // throws error if condition is false
 #define ASSERT(condition, message)          \
 if(!(condition)) {                          \
-  perror(message);                          \
+  printf("%s\n", message);                  \
   LOG_POS();                                \
   exit(EXIT_FAILURE);                       \
 }
