@@ -282,8 +282,8 @@ void rvm_about_to_modify(trans_t tid, void *segbase, int offset, int size) {
   }
 
   // Append new entry to undo log: Copy value of memory to undo log (see undo log structure)
-  UndoLog *ul = new UndoLog(ul->offset = offset, ul->size = size);
-  memcpy(ul->data, segbase, size);
+  UndoLog *ul = new UndoLog(offset,size);
+  memcpy(ul->data, segbase+offset, size);
 
   UndoLogNode *node = new UndoLogNode(ul);
   node->next = it->second->undo_logs;

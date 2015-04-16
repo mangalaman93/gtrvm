@@ -17,11 +17,12 @@ void proc1()
      rvm_t rvm;
      trans_t trans;
      char* segs[1];
-
+     //printf("about to initiate\n");
      rvm = rvm_init("rvm_segments");
+     //printf("Initiated\n");
      rvm_destroy(rvm, "testseg");
+     //printf("Debugged\n");
      segs[0] = (char *) rvm_map(rvm, "testseg", 10000);
-
 
      trans = rvm_begin_trans(rvm, 1, (void **) segs);
 
@@ -30,8 +31,9 @@ void proc1()
 
      rvm_about_to_modify(trans, segs[0], OFFSET2, 100);
      sprintf(segs[0]+OFFSET2, TEST_STRING);
-
+     //printf("%s\n",segs[0]);
      rvm_commit_trans(trans);
+     sleep(1);
 
      abort();
 }
@@ -46,6 +48,8 @@ void proc2()
      rvm = rvm_init("rvm_segments");
 
      segs[0] = (char *) rvm_map(rvm, "testseg", 10000);
+     //printf("%s\n",segs[0]);
+
      if(strcmp(segs[0], TEST_STRING)) {
 	  printf("ERROR: first hello not present\n");
 	  exit(2);
@@ -63,7 +67,7 @@ void proc2()
 int main(int argc, char **argv)
 {
      int pid;
-
+     //printf("main");
      pid = fork();
      if(pid < 0) {
 	  perror("fork");
