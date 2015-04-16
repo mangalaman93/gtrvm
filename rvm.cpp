@@ -249,7 +249,7 @@ trans_t rvm_begin_trans(rvm_t rvm, int numsegs, void **segbases) {
   base_trans_id += 1;
   transactions[base_trans_id] = trans;
   for(int i=0; i<numsegs; i++) {
-    trans->segbase_pointers->push_back(segbases[i]);
+    trans->segbase_pointers->push_back((char*)segbases[i]);
   }
 
   return base_trans_id;
@@ -261,26 +261,26 @@ trans_t rvm_begin_trans(rvm_t rvm, int numsegs, void **segbases) {
    saved, in case an abort is executed. It is legal call rvm_about_to_modify
    multiple times on the same memory area */
 void rvm_about_to_modify(trans_t tid, void *segbase, int offset, int size) {
+  // getting pointer to internal trans_t data structure
+  trans_int_t *t = transactions[tid];
+
+  // getting pointer to internal rvm data structure
+  rvm_int_t *r = t->rvm;
+
   // check if range lies in the mapped range
-  if((*tid.rvm->memory_to_size)[segbase] <= offset+size) {
+  map<char*, segment_t*>::iterator it;
+  it = r->memory_to_struct->find((char*)segbase);
+  if(it->second->size <= offset+size) {
     return;
   }
 
   // Append new entry to undo log: Copy value of memory to undo log (see undo log structure)
-  UndoLog *ul = new UndoLog();
-  ul->base = segbase;
-  ul->offset = offset;
-  ul->size = size;
+  UndoLog *ul = new UndoLog(ul->offset = offset, ul->size = size);
+  memcpy(ul->data, segbase, size);
 
-  // copying data;
-  char *data = new char[size];
-  memcpy(data, segbase, size);
-  ul->data = data;
-
-  LinkedListNode *node = new LinkedListNode();
-  node->pointer = ul;
-  node->next = tid.undo_logs;
-  tid.undo_logs = node;
+  UndoLogNode *node = new UndoLogNode(ul);
+  node->next = it->second->undo_logs;
+  it->second->undo_logs = node;
 }
 
 /* commit all changes that have been made within the specified transaction. When
