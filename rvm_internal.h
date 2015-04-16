@@ -54,8 +54,8 @@ typedef struct segment_t {
   char* segname;
   UndoLogNode* undo_logs;
 
-  segment_t(int s, bool m, char* n)
-    : size(s), modify(m), segname(n), undo_logs(NULL) {}
+  segment_t(int s, char* n)
+    : size(s), modify(false), segname(n), undo_logs(NULL) {}
 } segment_t;
 
 typedef struct trans_t {

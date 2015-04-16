@@ -1,11 +1,7 @@
 #include "rvm.h"
 
-int base_rvm_id = 0;
-int64_t base_trans_id = 0;
-
 // prefix for all the files
 #define DIR_PREFIX "/tmp"
-#define INDEX_FILE ".index"
 
 // delimiter
 const char DELIMITER[9] = "\r\n\r\n\r\n\r\n";
@@ -40,7 +36,6 @@ long get_file_size(const char* filename) {
 
   long size = file.tellg();
   file.seekg(0, ios::end);
-  ASSERT(file.good(), "unable to seek");
   size = file.tellg() - size;
   file.close();
   return size;
@@ -58,6 +53,7 @@ void write_to_file(const char* filename, const char* src, int size) {
 
   file.write(src, size);
   ASSERT(file.good(), "unable to write to file");
+
   file.flush();
   file.close();
 }
@@ -68,6 +64,7 @@ void append_to_file(const char* filename, const char* src, int size) {
 
   file.write(src, size);
   ASSERT(file.good(), "unable to write to file");
+
   file.flush();
   file.close();
 }
@@ -78,9 +75,9 @@ void read_from_file(const char* filename, char* dest, int size) {
 
   file.read(dest, size);
   ASSERT(file.good(), "unable to read from file");
+
   file.close();
 }
-/*--------------------------------------------------------------------------*/
 
 /* Initialize the library with the specified directory as backing store */
 rvm_t rvm_init(const char *directory) {
@@ -91,49 +88,6 @@ rvm_t rvm_init(const char *directory) {
   ss<<DIR_PREFIX<<"/"<<directory;
   mkdir(ss.str().c_str(), 0755);
 
-  // reading the index file and setting the transaction numbers
-  ss<<"/"<<INDEX_FILE;
-  ifstream index(ss.str().c_str());
-  if(index) {
-    index.seekg(0, ios::end);
-    size_t size = index.tellg();
-    index.close();
-
-    // if corrupt
-    int temp = (size)%9;
-    if(temp != 0) {
-      truncate(ss.str().c_str(), size-temp);
-    } else {
-      index.close();
-    }
-
-    // finding last max transaction id
-    ifstream indexfile(ss.str().c_str());
-    if(size != 0) {
-      char* buffer = new char[size];
-      indexfile.read(buffer, size);
-      indexfile.close();
-
-      for(unsigned int i=0; i<(size/5); i++) {
-        if(buffer[i*9+8] == ',') {
-          int64_t temp = *((int64_t*)(buffer[i*9]));
-
-          if(rvm.presentTx.count(temp) > 0) {
-            rvm.presentTx[temp] = true;
-          }
-
-          if(temp < base_trans_id) {
-            base_trans_id = temp;
-          }
-        }
-      }
-
-      delete[] buffer;
-    }
-  } else {
-    create_file(ss.str().c_str());
-  }
-
   return rvm;
 }
 
@@ -141,20 +95,21 @@ rvm_t rvm_init(const char *directory) {
    then create it and give it size size_to_create. If the segment exists but
    is shorter than size_to_create, then extend it until it is long enough.
    It is an error to try to map the same segment twice */
-void *rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
+void* rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
   char* segname_copy = new char[strlen(segname)+1];
   strcpy(segname_copy, segname);
 
   // should be unmapped
-  ASSERT(rvm.segname_to_memory->count(segname_copy) > 0,
-              "trying to map the same segment again");
+  if(!(rvm.segname_to_memory->count(segname_copy) > 0)) {
+    return NULL;
+  }
 
   // allocate memory area
   char* memory_area = new char[size_to_create];
   bzero(memory_area, size_to_create);
   (*rvm.segname_to_memory)[segname_copy] = memory_area;
-  (*rvm.memory_to_segname)[memory_area] = segname_copy;
-  (*rvm.memory_to_size)[memory_area] = size_to_create;
+  segment_t *seg = new segment_t(size_to_create, segname_copy);
+  (*rvm.memory_to_struct)[memory_area] = seg;
 
   // backing file name
   stringstream ss;
@@ -206,19 +161,7 @@ void *rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
         break;
       }
 
-      // getting transaction id
-      int64_t tid = *((int64_t*)(buffer[i]));
-      i += 8;
-
-      // check if transaction id is present in the index
-      if(rvm.presentTx.count(tid) > 0 && rvm.presentTx[tid]) {
-        // nothing
-      } else {
-        i = j + 8 - 1;
-        continue;
-      }
-
-      // if present apply
+      // applying the log to memory area (not backing file)
       while(i < j) {
         int32_t offset = *((int32_t*)(buffer[i]));
         int32_t datasize = *((int32_t*)(buffer[i+4]));
@@ -227,6 +170,8 @@ void *rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
         memcpy(memory_area+offset, buffer+i, datasize);
         i += datasize;
       }
+
+      i += 7;
     }
 
     delete[] buffer;
@@ -246,8 +191,7 @@ void rvm_unmap(rvm_t rvm, void *segbase) {
   // remove the mapping
   char* segname = (*rvm.memory_to_segname)[segbase];
   rvm.segname_to_memory->erase(segname);
-  rvm.memory_to_segname->erase(segbase);
-  rvm.memory_to_size->erase(segbase);
+  rvm.memory_to_struct->erase(segbase);
 
   // free memory
   delete ((char*)segbase);
@@ -258,11 +202,11 @@ void rvm_unmap(rvm_t rvm, void *segbase) {
    This function should not be called on a segment that is currently mapped,
    must call unmap first before calling destroy */
 void rvm_destroy(rvm_t rvm, const char *segname) {
-  ASSERT(rvm.segname_to_memory->count(segname) > 0, "cannot destroy mapped segment");
-
-  stringstream ss;
-  ss<<"rm -f "<<rvm.directory<<"/"<<segname<<".log "<<rvm.directory<<"/"<<segname<<".bak";
-  system(ss.str().c_str());
+  if(rvm.segname_to_memory->count(segname) > 0) {
+    stringstream ss;
+    ss<<"rm -f "<<rvm.directory<<"/"<<segname<<".log "<<rvm.directory<<"/"<<segname<<".bak";
+    system(ss.str().c_str());
+  }
 }
 
 /* begin a transaction that will modify the segments listed in segbases.
