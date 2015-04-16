@@ -14,11 +14,11 @@ using namespace std;
 
 /* we assign rvm ids incrementally and every new id
    is bigger than highest assigned id till now */
-int base_rvm_id = 0;
+extern int base_rvm_id;
 
 /* similar to rvm ids, we assign transaction ids incrementally
    and in a monotonically incremental way */
-int base_trans_id = 0;
+extern int base_trans_id;
 
 typedef int trans_t;
 typedef int rvm_t;
@@ -104,5 +104,5 @@ typedef struct rvm_int_t {
   }
 } rvm_int_t;
 
-map<trans_t, trans_int_t*> transactions;
-map<rvm_t, rvm_int_t*> rvms;
+extern map<trans_t, trans_int_t*> transactions;
+extern map<rvm_t, rvm_int_t*> rvms;

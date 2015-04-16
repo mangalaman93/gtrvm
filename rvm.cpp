@@ -1,5 +1,11 @@
 #include "rvm.h"
 
+// global variables
+int base_rvm_id = 0;
+int base_trans_id = 0;
+map<trans_t, trans_int_t*> transactions;
+map<rvm_t, rvm_int_t*> rvms;
+
 // prefix for all the files
 #define DIR_PREFIX "/tmp"
 
@@ -287,101 +293,62 @@ void rvm_about_to_modify(trans_t tid, void *segbase, int offset, int size) {
    the call returns, then enough information should have been saved to disk so that,
    even if the program crashes, the changes will be seen by the program when it restarts */
 void rvm_commit_trans(trans_t tid) {
-  while(tid.undo_logs) {
-    UndoLog *log = (UndoLog*)(tid.undo_logs->pointer);
-    char* segname = (*tid.rvm->memory_to_segname)[log->base];
-    stringstream ss;
-    ss<<DIR_PREFIX<<"/"<<tid.rvm->directory<<"/"<<segname<<".log";
+  // getting pointer to internal trans_t data structure
+  trans_int_t *t = transactions[tid];
 
+  // getting pointer to internal rvm data structure
+  rvm_int_t *r = t->rvm;
+
+  for(vector<char*>::iterator iter=t->segbase_pointers->begin();
+      iter!=t->segbase_pointers->end(); ++iter) {
+    segment_t *seg = (*r->memory_to_struct)[*iter];
+
+    stringstream ss;
+    ss<<DIR_PREFIX<<"/"<<r->directory<<"/"<<seg->segname<<".log";
     ofstream file(ss.str().c_str(), ios::app);
-    file.write((char*)(&(tid.id)), 8);
-    file.write((char*)(&(log->offset)), 4);
-    file.write((char*)(&(log->size)), 4);
-    file.write(log->data, log->size);
+    while(seg->undo_logs) {
+      UndoLog *log = (seg->undo_logs->pointer);
+
+      file.write((char*)(&(log->offset)), 4);
+      file.write((char*)(&(log->size)), 4);
+      file.write(log->data, log->size);
+
+      UndoLogNode *node = seg->undo_logs;
+      seg->undo_logs = node->next;
+      delete log;
+      delete node;
+    }
+
     file.write(DELIMITER, 8);
     file.flush();
     file.close();
-
-    LinkedListNode *node = tid.undo_logs;
-    tid.undo_logs = node->next;
-    delete[] ((char*)log->data);
-    delete log;
-    delete node;
-  }
-
-  stringstream ss;
-  ss<<DIR_PREFIX<<"/"<<tid.rvm->directory<<"/"<<INDEX_FILE;
-  ofstream file(ss.str().c_str(), ios::app);
-  file.write((char*)(&(tid.id)), 8);
-  file.close();
-
-  // remove transaction from the corresponding rvm
-  LinkedListNode* cur = tid.rvm->transactions;
-  ASSERT(cur, "transactions cannot be NULL");
-
-  // check the first element
-  trans_t *trans = (trans_t*)cur->pointer;
-  if(trans->id == tid.id) {
-    tid.rvm->transactions = NULL;
-  }
-
-  LinkedListNode* prev = cur;
-  cur = cur->next;
-
-  while(cur) {
-    trans_t *trans = (trans_t*)cur->pointer;
-    if(trans->id == tid.id) {
-      prev->next = cur->next;
-      delete trans;
-      delete cur;
-      break;
-    }
-
-    prev = cur;
-    cur = cur->next;
+    seg->modify = false;
   }
 }
 
 /* undo all changes that have happened within the specified transaction */
 void rvm_abort_trans(trans_t tid) {
-  // throw away the redo logs & apply undo logs
-  LinkedListNode *cur = tid.undo_logs;
-  while(cur) {
-    UndoLog* ul = (UndoLog*)cur->pointer;
-    memcpy(ul->base+ul->offset, ul->data, ul->size);
-    delete[] ul->data;
+  // getting pointer to internal trans_t data structure
+  trans_int_t *t = transactions[tid];
 
-    LinkedListNode *temp = cur;
-    cur = cur->next;
+  // getting pointer to internal rvm data structure
+  rvm_int_t *r = t->rvm;
 
-    delete ul;
-    delete temp;
-  }
+  for(vector<char*>::iterator iter=t->segbase_pointers->begin();
+      iter!=t->segbase_pointers->end(); ++iter) {
+    segment_t *seg = (*r->memory_to_struct)[*iter];
 
-  // remove transaction from the corresponding rvm
-  cur = tid.rvm->transactions;
-  ASSERT(cur, "transactions cannot be NULL");
+    while(seg->undo_logs) {
+      UndoLog *log = (seg->undo_logs->pointer);
+      memcpy((*iter) + log->offset, log->data, log->size);
 
-  // check the first element
-  trans_t *trans = (trans_t*)cur->pointer;
-  if(trans->id == tid.id) {
-    tid.rvm->transactions = NULL;
-  }
-
-  LinkedListNode* prev = cur;
-  cur = cur->next;
-
-  while(cur) {
-    trans_t *trans = (trans_t*)cur->pointer;
-    if(trans->id == tid.id) {
-      prev->next = cur->next;
-      delete trans;
-      delete cur;
-      break;
+      UndoLogNode *node = seg->undo_logs;
+      seg->undo_logs = node->next;
+      delete log;
+      delete node;
     }
 
-    prev = cur;
-    cur = cur->next;
+    seg->modify = false;
   }
 }
 
