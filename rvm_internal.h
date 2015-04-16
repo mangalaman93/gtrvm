@@ -20,16 +20,8 @@ int base_rvm_id = 0;
    and in a monotonically incremental way */
 int base_trans_id = 0;
 
-// for map
-struct CharCompare : public binary_function<const char*, const char*, bool> {
-public:
-  bool operator() (const char* str1, const char* str2) const {
-   return std::strcmp(str1, str2) < 0;
- }
-};
-
-// to remove circular depedency
-struct rvm_t;
+typedef int trans_t;
+typedef int rvm_t;
 
 // struct for Undo Logs
 typedef struct UndoLog {
@@ -37,7 +29,13 @@ typedef struct UndoLog {
   int32_t size;
   char* data;
 
-  UndoLog() : offset(0), size(0), data(NULL) {}
+  UndoLog(int32_t o, int32_t s) : offset(o), size(s) {
+    data = new char[size];
+  }
+
+  ~UndoLog() {
+    delete[] data;
+  }
 } UndoLog;
 
 /* struct to create a linked list of UndoLog */
@@ -45,7 +43,7 @@ typedef struct UndoLogNode {
   UndoLog* pointer;
   struct UndoLogNode* next;
 
-  UndoLogNode() : pointer(NULL), next(NULL) {}
+  UndoLogNode(UndoLog *p) : pointer(p), next(NULL) {}
 } UndoLogNode;
 
 typedef struct segment_t {
@@ -58,85 +56,53 @@ typedef struct segment_t {
     : size(s), modify(false), segname(n), undo_logs(NULL) {}
 } segment_t;
 
-typedef struct trans_t {
+struct rvm_int_t;
+typedef struct trans_int_t {
   // rvm pointer
-  struct rvm_t *rvm;
-  // transaction id
-  int64_t id;
+  struct rvm_int_t* rvm;
   // vector of all used segbase pointers
-  vector<void*> *segbase_pointers;
+  vector<char*>* segbase_pointers;
 
-  // default constructor overload
-  trans_t() : rvm(NULL), id(0), segbase_pointers(NULL) {
-    base_trans_id += 1;
-    id = base_trans_id;
-    segbase_pointers = new vector<void*>();
+  trans_int_t(struct rvm_int_t* r) {
+    rvm = r;
+    segbase_pointers = new vector<char*>;
   }
 
-  // destructor
-  ~trans_t() {
+  ~trans_int_t() {
     delete segbase_pointers;
   }
+} trans_int_t;
 
-  // cast to int
-  operator int() const {
-    return id;
-  }
-} trans_t;
+// for map
+struct CharCompare : public binary_function<const char*, const char*, bool> {
+public:
+  bool operator() (const char* str1, const char* str2) const {
+   return strcmp(str1, str2) < 0;
+ }
+};
 
 /* rvm struct */
-typedef struct rvm_t {
-  // rvm id
-  int id;
+typedef struct rvm_int_t {
   // corresponding directory name
   char* directory;
   // mapping from segname to memory area
   map<const char*, char*, CharCompare>* segname_to_memory;
-  // reverse mapping to memory area to segment name
+  // mapping from memory area to segment
   map<char*, segment_t*>* memory_to_struct;
 
-  // default constructor overload
-  rvm_t() : id(0), directory(NULL), segname_to_memory(NULL),
-            memory_to_struct(NULL) {}
-
-  // constructor
-  rvm_t(const char* dir) : id(-1), directory(NULL), segname_to_memory(NULL),
-                           memory_to_struct(NULL) {
-    base_rvm_id += 1;
-    id = base_rvm_id;
+  rvm_int_t(const char* dir) {
     directory = new char[strlen(dir)+1];
     strcpy(directory, dir);
     segname_to_memory = new map<const char*, char*, CharCompare>();
     memory_to_struct = new map<char*, segment_t*>();
   }
 
-  ~rvm_t() {
+  ~rvm_int_t() {
     delete[] directory;
     delete segname_to_memory;
-
-    // deleting data areas & corresponding segment string & undo logs
-    for(map<char*, segment_t*>::iterator iter=memory_to_struct->begin();
-        iter!=memory_to_struct->end(); ++iter) {
-      UndoLogNode *undo_logs = iter->second->undo_logs;
-      while(undo_logs) {
-        delete[] undo_logs->pointer->data;
-
-        UndoLogNode* node = undo_logs;
-        undo_logs = node->next;
-        delete node->pointer;
-        delete node;
-      }
-
-      delete[] ((char*)iter->first);
-      delete[] iter->second->segname;
-      delete iter->second;
-    }
-
     delete memory_to_struct;
   }
+} rvm_int_t;
 
-  // cast to int
-  operator int() const {
-    return id;
-  }
-} rvm_t;
+map<trans_t, trans_int_t*> transactions;
+map<rvm_t, rvm_int_t*> rvms;

@@ -81,14 +81,16 @@ void read_from_file(const char* filename, char* dest, int size) {
 
 /* Initialize the library with the specified directory as backing store */
 rvm_t rvm_init(const char *directory) {
-  rvm_t rvm(directory);
+  rvm_int_t* r = new rvm_int_t(directory);
+  base_rvm_id = base_rvm_id + 1;
+  rvms[base_rvm_id] = r;
 
   // initialize the log segment and return it
   stringstream ss;
   ss<<DIR_PREFIX<<"/"<<directory;
   mkdir(ss.str().c_str(), 0755);
 
-  return rvm;
+  return base_rvm_id;
 }
 
 /* map a segment from disk into memory. If the segment does not already exist,
@@ -99,26 +101,29 @@ void* rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
   char* segname_copy = new char[strlen(segname)+1];
   strcpy(segname_copy, segname);
 
+  // getting pointer to internal rvm data structure
+  rvm_int_t *r = rvms[rvm];
+
   // should be unmapped
-  if(!(rvm.segname_to_memory->count(segname_copy) > 0)) {
+  if(!(r->segname_to_memory->count(segname_copy) > 0)) {
     return NULL;
   }
 
   // allocate memory area
   char* memory_area = new char[size_to_create];
   bzero(memory_area, size_to_create);
-  (*rvm.segname_to_memory)[segname_copy] = memory_area;
+  (*r->segname_to_memory)[segname_copy] = memory_area;
   segment_t *seg = new segment_t(size_to_create, segname_copy);
-  (*rvm.memory_to_struct)[memory_area] = seg;
+  (*r->memory_to_struct)[memory_area] = seg;
 
   // backing file name
   stringstream ss;
-  ss<<DIR_PREFIX<<"/"<<rvm.directory<<"/"<<segname_copy<<".bak";
+  ss<<DIR_PREFIX<<"/"<<r->directory<<"/"<<segname_copy<<".bak";
   const char* bfilename = ss.str().c_str();
 
   // log file name
   stringstream st;
-  st<<DIR_PREFIX<<"/"<<rvm.directory<<"/"<<segname_copy<<".log";
+  st<<DIR_PREFIX<<"/"<<r->directory<<"/"<<segname_copy<<".log";
   const char* lfilename = st.str().c_str();
 
   // read the file in memory if it already exists
@@ -186,25 +191,36 @@ void* rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
 
 /* unmap a segment from memory */
 void rvm_unmap(rvm_t rvm, void *segbase) {
-  ASSERT(rvm.memory_to_segname->count(segbase) > 0, "unable to unmap");
+  // getting pointer to internal rvm data structure
+  rvm_int_t *r = rvms[rvm];
 
   // remove the mapping
-  char* segname = (*rvm.memory_to_segname)[segbase];
-  rvm.segname_to_memory->erase(segname);
-  rvm.memory_to_struct->erase(segbase);
+  map<char*, segment_t*>::iterator it;
+  it = r->memory_to_struct->find((char*)segbase);
+
+  // mapping must exists and all transaction must have been commited
+  ASSERT(it != r->memory_to_struct->end(), "unable to unmap");
+  ASSERT(!it->second->modify, "unmapping a segnment which is involved in a transaction!");
+  ASSERT(!it->second->undo_logs, "this is not possible!");
 
   // free memory
-  delete ((char*)segbase);
-  delete ((char*)segname);
+  r->memory_to_struct->erase(it);
+  r->segname_to_memory->erase(it->second->segname);
+  delete[] ((char*)segbase);
+  delete[] ((char*)it->second->segname);
+  delete it->second;
 }
 
 /* destroy a segment completely, erasing its backing store.
    This function should not be called on a segment that is currently mapped,
    must call unmap first before calling destroy */
 void rvm_destroy(rvm_t rvm, const char *segname) {
-  if(rvm.segname_to_memory->count(segname) > 0) {
+  // getting pointer to internal rvm data structure
+  rvm_int_t *r = rvms[rvm];
+
+  if(r->segname_to_memory->count(segname) > 0) {
     stringstream ss;
-    ss<<"rm -f "<<rvm.directory<<"/"<<segname<<".log "<<rvm.directory<<"/"<<segname<<".bak";
+    ss<<"rm -f "<<r->directory<<"/"<<segname<<".log "<<r->directory<<"/"<<segname<<".bak";
     system(ss.str().c_str());
   }
 }
@@ -214,38 +230,29 @@ void rvm_destroy(rvm_t rvm, const char *segname) {
    then the call should fail and return (trans_t) -1. Note that trant_t needs
    to be able to be typecasted to an integer type */
 trans_t rvm_begin_trans(rvm_t rvm, int numsegs, void **segbases) {
-  for(int i=0; i<numsegs; i++) {
-    LinkedListNode* cur_trans = rvm.transactions;
-    while(cur_trans) {
-      for(std::vector<void*>::iterator iter = ((trans_t*)(cur_trans->pointer))->segbase_pointers->begin();
-          iter != ((trans_t*)(cur_trans->pointer))->segbase_pointers->end(); ++iter) {
-        if(*iter == segbases[i]) {
-          return *(trans_t*)(-1);
-        }
-      }
+  // getting pointer to internal rvm data structure
+  rvm_int_t *r = rvms[rvm];
 
-      cur_trans = cur_trans->next;
+  for(int i=0; i<numsegs; i++) {
+    map<char*, segment_t*>::iterator it;
+    it = r->memory_to_struct->find((char*)segbases[i]);
+
+    if(it->second->modify) {
+      return *(trans_t*)(-1);
+    } else {
+      ASSERT(!it->second->undo_logs, "this is not possible!");
+      it->second->modify = true;
     }
   }
 
-  trans_t *trans = new trans_t();
-  trans->rvm = &rvm;
+  trans_int_t *trans = new trans_int_t(r);
+  base_trans_id += 1;
+  transactions[base_trans_id] = trans;
   for(int i=0; i<numsegs; i++) {
     trans->segbase_pointers->push_back(segbases[i]);
   }
 
-  // add to rvm list
-  LinkedListNode *node = new LinkedListNode();
-  node->pointer = (void*) trans;
-  node->next = rvm.transactions;
-  rvm.transactions = node;
-
-  // add transaction into the index file
-  stringstream ss;
-  ss<<DIR_PREFIX<<"/"<<rvm.directory<<"/"<<INDEX_FILE;
-  append_to_file(ss.str().c_str(), (char*)(&trans->id), 8);
-
-  return *trans;
+  return base_trans_id;
 }
 
 /* declare that the library is about to modify a specified range of memory in the
