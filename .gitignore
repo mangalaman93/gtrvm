@@ -37,3 +37,6 @@ multi-abort
 multi
 truncate
 write
+
+# segment folders
+rvm_segments/*

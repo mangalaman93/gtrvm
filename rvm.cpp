@@ -7,7 +7,7 @@ map<trans_t, trans_int_t*> transactions;
 map<rvm_t, rvm_int_t*> rvms;
 
 // prefix for all the files
-#define DIR_PREFIX "/tmp"
+#define DIR_PREFIX ""
 
 // delimiter
 const char DELIMITER[9] = "\r\n\r\n\r\n\r\n";
@@ -93,7 +93,7 @@ rvm_t rvm_init(const char *directory) {
 
   // initialize the log segment and return it
   stringstream ss;
-  ss<<DIR_PREFIX<<"/"<<directory;
+  ss<<DIR_PREFIX<<directory;
   mkdir(ss.str().c_str(), 0755);
 
   return base_rvm_id;
@@ -124,13 +124,13 @@ void* rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
 
   // backing file name
   stringstream ss;
-  ss<<DIR_PREFIX<<"/"<<r->directory<<"/"<<segname_copy<<".bak";
+  ss<<DIR_PREFIX<<r->directory<<"/"<<segname_copy<<".bak";
   string bs(ss.str());
   const char* bfilename = bs.c_str();
 
   // log file name
   stringstream st;
-  st<<DIR_PREFIX<<"/"<<r->directory<<"/"<<segname_copy<<".log";
+  st<<DIR_PREFIX<<r->directory<<"/"<<segname_copy<<".log";
   string ls(st.str());
   const char* lfilename = ls.c_str();
 
@@ -226,9 +226,12 @@ void rvm_destroy(rvm_t rvm, const char *segname) {
   // getting pointer to internal rvm data structure
   rvm_int_t *r = rvms[rvm];
 
-  stringstream ss;
+  if(r->segname_to_memory->count(segname) > 0) {
+    return;
+  }
 
-  ss<<"rm -f "<<DIR_PREFIX<<"/"<<r->directory<<"/"<<segname<<".log "<<DIR_PREFIX<<"/"<<r->directory<<"/"<<segname<<".bak";
+  stringstream ss;
+  ss<<"rm -f "<<DIR_PREFIX<<r->directory<<"/"<<segname<<".log "<<DIR_PREFIX<<r->directory<<"/"<<segname<<".bak";
   system(ss.str().c_str());
 }
 
@@ -245,7 +248,7 @@ trans_t rvm_begin_trans(rvm_t rvm, int numsegs, void **segbases) {
     it = r->memory_to_struct->find((char*)segbases[i]);
 
     if(it->second->modify) {
-      return *(trans_t*)(-1);
+      return -1;
     } else {
       ASSERT(!it->second->undo_logs, "this is not possible!");
       it->second->modify = true;
@@ -277,12 +280,12 @@ void rvm_about_to_modify(trans_t tid, void *segbase, int offset, int size) {
   // check if range lies in the mapped range
   map<char*, segment_t*>::iterator it;
   it = r->memory_to_struct->find((char*)segbase);
-  if(it->second->size <= offset+size) {
+  if(it->second->size < offset+size) {
     return;
   }
 
   // Append new entry to undo log: Copy value of memory to undo log (see undo log structure)
-  UndoLog *ul = new UndoLog(offset,size);
+  UndoLog *ul = new UndoLog(offset, size);
   memcpy(ul->data, segbase+offset, size);
 
   UndoLogNode *node = new UndoLogNode(ul);
@@ -305,7 +308,7 @@ void rvm_commit_trans(trans_t tid) {
     segment_t *seg = (*r->memory_to_struct)[*iter];
 
     stringstream ss;
-    ss<<DIR_PREFIX<<"/"<<r->directory<<"/"<<seg->segname<<".log";
+    ss<<DIR_PREFIX<<r->directory<<"/"<<seg->segname<<".log";
     ofstream file(ss.str().c_str(), ios::app);
     while(seg->undo_logs) {
       UndoLog *log = (seg->undo_logs->pointer);
@@ -356,5 +359,82 @@ void rvm_abort_trans(trans_t tid) {
 /* play through any committed or aborted items in the log file(s) and
    shrink the log file(s) as much as possible */
 void rvm_truncate_log(rvm_t rvm) {
-  // apply the redo logs on the backing file
+  // getting pointer to internal rvm data structure
+  rvm_int_t *r = rvms[rvm];
+
+  DIR *dir;
+  struct dirent *ent;
+  if((dir = opendir(r->directory)) != NULL) {
+    while((ent = readdir(dir)) != NULL) {
+      string filename(ent->d_name);
+      if(filename.find(".log") == string::npos) {
+        continue;
+      }
+
+      // log file name
+      string ls = string(r->directory) + string("/") + filename;
+      const char* lfilename = ls.c_str();
+
+      // backing file name
+      string bs = string(r->directory) + string("/") + filename;
+      int length = bs.length();
+      bs[length-3] = 'b';
+      bs[length-2] = 'a';
+      bs[length-1] = 'k';
+      const char* bfilename = bs.c_str();
+
+      // reading the log file
+      ifstream lfile(lfilename);
+      lfile.seekg(0, ios::end);
+      size_t lsize = lfile.tellg();
+      lfile.seekg(0, ios::beg);
+      char* buffer = new char[lsize];
+      lfile.read(buffer, lsize);
+      lfile.close();
+
+      // reading the backing file
+      ifstream bfile(bfilename);
+      bfile.seekg(0, ios::end);
+      size_t bsize = bfile.tellg();
+      bfile.seekg(0, ios::beg);
+      char* memory_area = new char[bsize];
+      bfile.read(memory_area, bsize);
+      bfile.close();
+
+      for(unsigned int i=0; i<lsize; i++) {
+        unsigned int j;
+        bool flag = true;
+        for(j=i; j<lsize; j++) {
+          if((buffer[j] == '\r') && (memcmp(buffer+j, DELIMITER, 8)==0)) {
+            flag = false;
+            break;
+          }
+        }
+
+        if(flag) {
+          truncate(lfilename, i);
+          break;
+        }
+
+        // applying the log to memory area (not backing file)
+        while(i < j) {
+          int32_t offset = *((int32_t*)(&buffer[i]));
+          int32_t datasize = *((int32_t*)(&buffer[i+4]));
+          i += 8;
+
+          memcpy(memory_area+offset, buffer+i, datasize);
+          i += datasize;
+        }
+
+        i += 7;
+      }
+
+      write_to_file(bfilename, memory_area, bsize);
+      truncate(lfilename, 0);
+      delete[] memory_area;
+      delete[] buffer;
+    }
+
+    closedir(dir);
+  }
 }
