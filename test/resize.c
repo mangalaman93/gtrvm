@@ -20,7 +20,7 @@
 void proc1()
 {
      rvm_t rvm;
-     char* segs[2];
+     char* segs[1];
      trans_t trans;
 
      rvm = rvm_init("rvm_segments");
@@ -42,11 +42,11 @@ void proc1()
 
 void proc2()
 {
-
+     rvm_t rvm;
+     char* segs[1];
      printf("Before Resizing:\n");
      system("ls -l rvm_segments");
      rvm = rvm_init("rvm_segments");
-
      segs[0] = (char*) rvm_map(rvm, SEGNAME0, 10000);
 
      printf("\nAfter Resizing:\n");
