@@ -19,6 +19,7 @@ char * makeString(int max){
      sprintf(j,"%d ",i);
      strcat(test_string,j);
    }
+   //printf("%s\n",test_string);
    return test_string;
 }
 
@@ -46,9 +47,11 @@ void proc1(int n_write)
 
      trans = rvm_begin_trans(rvm, 1, (void **) segs);
 
-     rvm_about_to_modify(trans, segs[0], 0, 1000000);
-     sprintf(segs[0], makeString(n_write));
-
+     rvm_about_to_modify(trans, segs[0], 0, 1000000-1);
+     char* str;
+     str=makeString(n_write);
+     sprintf(segs[0], str);
+     ///printf("%s\n",segs[0]);
      rvm_commit_trans(trans);
 
      abort();
@@ -62,9 +65,10 @@ void proc2(int n_write)
     rvm_t rvm;
     rvm = rvm_init("rvm_segments");
     segs[0] = (char *) rvm_map(rvm, "int_string", 1000000);
+    //printf("%s\n",segs[0]);
     int n = lastInt(segs[0]);
     if (n == (n_write-1)){
-        printf("OK");
+        printf("OK\n");
     }else{
         printf("error:%d",n);}
      exit(0);
