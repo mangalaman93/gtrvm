@@ -12,29 +12,25 @@ Ans: By software call of truncate, truncate is called by the user of rvm explici
 
 # Implementation
 ## Overview
- A memory segment can be created/retrieved from disk by calling `rvm_map`. Changes are committed to disk by calling `rvm_commit_trans`. `rvm_abort_trans` restores a memory segment to its last committed value from the undo log stored in memory. `rvm_about_to_modify` is required to be called before making any modifications in the segment. Additionally call to truncate, updates the backing file and deletes the log files.
+ A memory segment can be created or retrieved from disk by calling `rvm_map`. Changes are committed to disk by calling `rvm_commit_trans`. A call to `rvm_abort_trans` restores a memory segment to its last committed value from the undo log stored in memory. `rvm_about_to_modify` is required to be called before making any modifications in the segment. Additionally, a call to truncate, updates the backing file and deletes the log files.
 
 ## Persistency
 Our scheme saves a log file and backing file per memory segment. Initially the log files are empty, on commit we append a transaction record to the files, representing the intent to modify. On truncate, we read the logs, apply it to the backing file, and then delete the logs.
 
-Additionally, we keep a persistent list of the committed transaction in an auxiliar log file. This list is updated at the beggining and end of the commit function, in a way that a commited transaction will have two entries and an uncommited will have only one. This is key to guarantee persistency when writing to multiple segments in the same transaction.
-
-In summary, before committing, no entry exists in log file, therefore none of the changes made to memory will persist. After commiting log files exist, thus changes will persist. The worst case is if a crash happens while commiting. In that case we ignore uncommitted changes when finding only one entry or no entry in the index of committed transactions on recovery.
+In summary, before committing, no entries exist in the log file, therefore none of the changes made to memory will persist. After committing log files exist, thus changes will persist. The worst case when a crash happens while commiting. In that case we ignore uncommitted changes when finding that an incomplete entry is present on log files.
 
 ## Function details
-* On map, we retrieve the segment from the backing file; if a log exists, we apply all committed transactions to memory. Therefore, in the worst case, if a crash happened while committing, the system still works flawlessly by simply ignoring uncommited transactions. We also check for the constraints described in the assigment.
-* On commit, we write changes specified in the transaction to the log files, after all the segments have been touched, we write the transaction id to the list of committed transactions.
+* On map, we retrieve the segment from the backing file; if a log exists, we apply all committed transactions to memory. In the worst case, if a crash happened while committing, the system still works flawlessly by simply ignoring uncommited transactions. We also check for the constraints described in the assigment.
+* On commit, we write changes specified in the transaction to the log files.
 * On truncate, if a log exists, we write all committed transactions to the backing file. Next, we delete the log file. We repeat this for every segment.
 * About_to_modify is required before any modifications are made to memory segment. When called, we store the undo logs in memory.
 * Begin_trans makes sure everything works by not allowing two transactions to modify the same segments. We also have to make sure transaction ids are unique. We check if there are any aborted/crashed transaction by looking for non-duplicates in the committed transaction log.
 
 # Additional test cases.
-* `incomplete.c`: forgets to commit and checks if values are still unchanged
-* `crash.c`: interrupts program while commiting to a single segment, checks if program is in a consistent state
-* `multi-crash.c`: Interrupts program while commiting to multiple segments, checks if program is in a consistent state
-
-## crash and multi-crash test cases
-At crash we interrupt our program while flushing a very long segment to disk. Before committing, no log file exists, therefore none of the changes made to memory will persist. After commiting log files exist, thus changes will persist. The only case is if a crash happens while commiting. So we simulate that. A multi crash writes several segments in a single transaction, and we interrupt the program while doing that. Depending on the way the program was designed it's easy to forget to guarantee consisteny between multiple segments.
+* `about.c`: checks if multiple calls to about to modify are allowed and if they change the behavior of the program.
+* `bigbasic.c`: test if a big string can be written to the memory
+* `resize.c`: checks if a segment is increased when mappin a new value
+* `truncate2.c`: checks if  memory is consistent after truncate
 
 # Files:
 * Backing file: exact copy of the memory to file &lt;segname&gt;.bak
