@@ -42,3 +42,4 @@ resize
 
 # segment folders
 rvm_segments/*
+doc/*
