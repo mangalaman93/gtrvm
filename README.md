@@ -26,12 +26,6 @@ In summary, before committing, no entries exist in the log file, therefore none 
 * About_to_modify is required before any modifications are made to memory segment. When called, we store the undo logs in memory.
 * Begin_trans makes sure everything works by not allowing two transactions to modify the same segments. We also have to make sure transaction ids are unique. We check if there are any aborted/crashed transaction by looking for non-duplicates in the committed transaction log.
 
-# Additional test cases.
-* `about.c`: checks if multiple calls to about to modify are allowed and if they change the behavior of the program.
-* `bigbasic.c`: test if a big string can be written to the memory
-* `resize.c`: checks if a segment is increased when mappin a new value
-* `truncate2.c`: checks if  memory is consistent after truncate
-
 # Files:
 * Backing file: exact copy of the memory to file &lt;segname&gt;.bak
 * Log Files: Name: &lt;segname&gt;.log <br/>

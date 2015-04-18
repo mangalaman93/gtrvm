@@ -12,7 +12,7 @@ LIB_SRC = rvm.cpp
 LIB_OBJ = $(patsubst %.cpp,%.o,$(LIB_SRC))
 
 TEST = test
-_OBJ = abort about basic bigbasic multi-abort multi truncate truncate2 resize
+_OBJ = abort abort2 about basic bigbasic multi-abort multi truncate truncate2 resize bad-unmap
 OBJ = $(patsubst %,$(TEST)/%.o,$(_OBJ))
 
 all: $(LIBRARY) $(OBJ) $(_OBJ)
@@ -30,4 +30,4 @@ $(LIBRARY): $(LIB_OBJ)
 clean:
 	$(RM) $(LIBRARY) $(LIB_OBJ)
 	$(RM) $(TEST)/*.o
-	$(RM) abort about basic bigbasic multi-abort multi truncate truncate2 resize
+	$(RM) abort abort2 about basic bigbasic multi-abort multi truncate truncate2 resize bad-unmap

@@ -112,7 +112,8 @@ void* rvm_map(rvm_t rvm, const char *segname, int size_to_create) {
 
   // should be unmapped
   if(r->segname_to_memory->count(segname_copy) > 0) {
-    return NULL;
+    delete[] segname_copy;
+    return (*r->segname_to_memory)[segname];
   }
 
   // allocate memory area
@@ -208,7 +209,7 @@ void rvm_unmap(rvm_t rvm, void *segbase) {
 
   // mapping must exists and all transaction must have been commited
   ASSERT(it != r->memory_to_struct->end(), "unable to unmap");
-  ASSERT(!it->second->modify, "unmapping a segnment which is involved in a transaction!");
+  ASSERT(it->second->modify == -1, "unmapping a segnment which is involved in a transaction!");
   ASSERT(!it->second->undo_logs, "this is not possible!");
 
   // free memory
@@ -247,11 +248,11 @@ trans_t rvm_begin_trans(rvm_t rvm, int numsegs, void **segbases) {
     map<char*, segment_t*>::iterator it;
     it = r->memory_to_struct->find((char*)segbases[i]);
 
-    if(it->second->modify) {
+    if(it->second->modify != -1) {
       return -1;
     } else {
       ASSERT(!it->second->undo_logs, "this is not possible!");
-      it->second->modify = true;
+      it->second->modify = base_trans_id + 1;
     }
   }
 
@@ -276,6 +277,12 @@ void rvm_about_to_modify(trans_t tid, void *segbase, int offset, int size) {
 
   // getting pointer to internal rvm data structure
   rvm_int_t *r = t->rvm;
+
+  // check if transaction has permission to modify the segment
+  if((*r->memory_to_struct)[(char*)segbase]->modify != tid) {
+    printf("Trying to modify a segment without asking permission!\n");
+    return;
+  }
 
   // check if range lies in the mapped range
   map<char*, segment_t*>::iterator it;
@@ -326,7 +333,7 @@ void rvm_commit_trans(trans_t tid) {
     file.write(DELIMITER, 8);
     file.flush();
     file.close();
-    seg->modify = false;
+    seg->modify = -1;
   }
 }
 
@@ -352,7 +359,7 @@ void rvm_abort_trans(trans_t tid) {
       delete node;
     }
 
-    seg->modify = false;
+    seg->modify = -1;
   }
 }
 

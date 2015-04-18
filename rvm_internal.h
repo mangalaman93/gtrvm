@@ -49,12 +49,12 @@ typedef struct UndoLogNode {
 
 typedef struct segment_t {
   int size;
-  bool modify;
+  int modify;
   char* segname;
   UndoLogNode* undo_logs;
 
   segment_t(int s, char* n)
-    : size(s), modify(false), segname(n), undo_logs(NULL) {}
+    : size(s), modify(-1), segname(n), undo_logs(NULL) {}
 } segment_t;
 
 struct rvm_int_t;

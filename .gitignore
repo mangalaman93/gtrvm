@@ -29,14 +29,16 @@
 
 # Test Executables
 abort
+abort2
+about
+bad-unmap
 basic
 bigbasic
-crash
-incomplete
 multi-abort
 multi
 truncate
-write
+truncate2
+resize
 
 # segment folders
 rvm_segments/*
