@@ -10,6 +10,11 @@ Ans: See at end of document <br/>
 Question: How do the files get cleaned up? <br/>
 Ans: By software call of truncate, truncate is called by the user of rvm explicitly <br/>
 
+Contributors
+------------
+* Aman Mangal
+* Flavio Castro
+
 Overview
 --------
 A memory segment can be created or retrieved from disk by calling `rvm_map`. Changes are committed to disk by calling `rvm_commit_trans`. A call to `rvm_abort_trans` restores a memory segment to its last committed value from the undo log stored in memory. `rvm_about_to_modify` is required to be called before making any modifications in the segment. Additionally, a call to truncate, updates the backing file and shrinks the log files as much as possible.
