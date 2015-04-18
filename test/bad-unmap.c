@@ -7,7 +7,7 @@ int main()
 {
      rvm_t rvm;
      trans_t trans;
-     char* segs[0];
+     char* segs[1];
 
      rvm = rvm_init("rvm_segments");
      rvm_destroy(rvm, SEGNAME);
